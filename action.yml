@@ -40,7 +40,13 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
     - shell: bash
-      run: pip install -q "git+https://github.com/DXv-3/dspy-dropin@${{ inputs.version }}"
+      env:
+        IN_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        # inputs are passed via env (never interpolated into the script) and the ref is shape-checked
+        if ! [[ "$IN_VERSION" =~ ^[A-Za-z0-9._/-]{1,100}$ ]]; then echo "invalid version ref" >&2; exit 1; fi
+        pip install -q "git+https://github.com/DXv-3/dspy-dropin@${IN_VERSION}"
     - id: run
       shell: bash
       env:
