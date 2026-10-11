@@ -1,0 +1,66 @@
+name: "dspy-dropin"
+description: "Run a DSPy signature (or a plain question) in CI with zero setup."
+branding: { icon: "cpu", color: "purple" }
+inputs:
+  signature:
+    description: 'DSPy signature, e.g. "diff -> review". Leave empty to use `prompt` with ask.'
+    required: false
+    default: ""
+  inputs:
+    description: "JSON object of input fields for the signature."
+    required: false
+    default: "{}"
+  prompt:
+    description: "Question for `dspy-dropin ask` (used when signature is empty)."
+    required: false
+    default: ""
+  model:
+    description: "LiteLLM model string (e.g. openai/gpt-4o-mini). Defaults to env auto-detection."
+    required: false
+    default: ""
+  load:
+    description: "Optional path to optimized program JSON."
+    required: false
+    default: ""
+  python-version:
+    required: false
+    default: "3.11"
+  version:
+    description: "git ref of dspy-dropin to install"
+    required: false
+    default: "main"
+outputs:
+  result:
+    description: "JSON (run) or text (ask) result."
+    value: ${{ steps.run.outputs.result }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+    - shell: bash
+      run: pip install -q "git+https://github.com/DXv-3/dspy-dropin@${{ inputs.version }}"
+    - id: run
+      shell: bash
+      env:
+        IN_SIG: ${{ inputs.signature }}
+        IN_JSON: ${{ inputs.inputs }}
+        IN_PROMPT: ${{ inputs.prompt }}
+        IN_MODEL: ${{ inputs.model }}
+        IN_LOAD: ${{ inputs.load }}
+      run: |
+        set -euo pipefail
+        args=()
+        [ -n "$IN_MODEL" ] && args+=(--model "$IN_MODEL")
+        if [ -n "$IN_SIG" ]; then
+          extra=()
+          [ -n "$IN_LOAD" ] && extra+=(--load "$IN_LOAD")
+          out=$(dspy-dropin "${args[@]}" run "$IN_SIG" --json "$IN_JSON" "${extra[@]}")
+        else
+          out=$(dspy-dropin "${args[@]}" ask "$IN_PROMPT")
+        fi
+        echo "$out"
+        delim="EOF_$RANDOM$RANDOM"
+        { echo "result<<$delim"; echo "$out"; echo "$delim"; } >> "$GITHUB_OUTPUT"
+        { echo '### dspy-dropin result'; echo '```'; echo "$out"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
