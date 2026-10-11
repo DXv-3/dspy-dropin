@@ -1,0 +1,21 @@
+# Copy to .github/workflows/ in any repo.
+name: AI PR summary
+on: pull_request
+jobs:
+  summarize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - id: diff
+        run: |
+          git diff origin/${{ github.base_ref }}...HEAD | head -c 20000 > diff.txt
+          echo "json=$(python -c 'import json;print(json.dumps({"diff":open("diff.txt").read()}))')" >> "$GITHUB_OUTPUT"
+      - id: ai
+        uses: DXv-3/dspy-dropin@main
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        with:
+          signature: "diff -> summary, risks: list[str]"
+          inputs: ${{ steps.diff.outputs.json }}
+      - run: echo '${{ steps.ai.outputs.result }}'
