@@ -52,6 +52,8 @@ output field, so you can wire up and test whole pipelines for free.
 | `OLLAMA_BASE_URL` | → `ollama_chat/llama3.1` at that URL |
 | `DSPY_API_BASE` / `DSPY_API_KEY` | Custom endpoint (any OpenAI-compatible server) |
 | `DSPY_TEMPERATURE` (0.0), `DSPY_MAX_TOKENS` (4000), `DSPY_CACHE` (1) | LM defaults |
+| `DSPY_TIMEOUT` (60), `DSPY_NUM_RETRIES` (3) | Per-call LM timeout (seconds) and retries |
+| `DSPY_DROPIN_TOKEN`, `DSPY_DROPIN_MAX_BODY` (1048576) | HTTP server bearer token (enforced when set) and body cap |
 | `DSPY_DUMMY_ANSWER` | Value returned by the `dummy` model (default `42`) |
 
 To set things explicitly, use `dspy_dropin.configure(model="openai/gpt-4o", temperature=0.7)`, or `configure(lm=any_dspy_lm, force=True)`.
@@ -99,13 +101,18 @@ dspy-dropin --model ollama_chat/llama3.1 ask "hi"           # per-call model ove
 ## HTTP server (for n8n, Zapier, Make, Node, anything)
 
 ```bash
-dspy-dropin serve --host 0.0.0.0 --port 8000      # stdlib, no extras needed
+dspy-dropin serve --port 8000                     # binds 127.0.0.1; stdlib, no extras needed
+DSPY_DROPIN_TOKEN=$(openssl rand -hex 32) dspy-dropin serve --host 0.0.0.0   # network-exposed: always set a token
 pip install "dspy-dropin[server] @ git+https://github.com/DXv-3/dspy-dropin"   # optional FastAPI + uvicorn
 ```
 
 `GET /health`, `POST /ask {"prompt"}`, `POST /run {"signature", "inputs"}`, `POST /m/<name>` for your own modules
 (`serve(modules={"triage": my_module})`). See [examples/http_n8n_zapier.md](examples/http_n8n_zapier.md).
-The server has no authentication, so bind to localhost or put it behind your own proxy.
+Security: the server binds `127.0.0.1` by default. Set `DSPY_DROPIN_TOKEN` and every endpoint (except a liveness-only
+`/health`) requires `Authorization: Bearer <token>`; binding a non-loopback host without a token prints a loud warning.
+Bodies are capped at `DSPY_DROPIN_MAX_BODY` bytes (default 1 MiB) and must be JSON objects; inputs are validated;
+internal errors return `{"error": "internal error"}` and are logged with secrets redacted. LM calls time out after
+`DSPY_TIMEOUT` seconds (default 60, retries `DSPY_NUM_RETRIES`=3). See [SECURITY.md](SECURITY.md).
 
 ## GitHub Action
 
