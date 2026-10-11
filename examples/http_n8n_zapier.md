@@ -4,14 +4,17 @@ Start the server (stdlib backend needs no extras; `pip install "dspy-dropin[serv
 
 ```bash
 export OPENAI_API_KEY=...        # or DSPY_MODEL=dummy to try it offline
+export DSPY_DROPIN_TOKEN=$(openssl rand -hex 32)   # required in practice once you leave localhost
 dspy-dropin serve --host 0.0.0.0 --port 8000
 ```
+
+Every request then needs `-H "Authorization: Bearer $DSPY_DROPIN_TOKEN"` (in n8n/Zapier/Make: add it as a header).
 
 ## Endpoints
 
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| GET | `/health` | – | `{"ok": true, "model": "...", "modules": [...]}` |
+| GET | `/health` | – | `{"ok": true, "model": "...", "modules": [...]}` (just `{"ok": true}` without the token) |
 | POST | `/ask` | `{"prompt": "...", "reasoning": false}` | `{"answer": "..."}` |
 | POST | `/run` | `{"signature": "email -> intent, urgency: int", "inputs": {"email": "..."}}` | `{"intent": "...", "urgency": 3}` |
 | POST | `/m/<name>` | input fields | output fields of a registered module (see `server_custom.py`) |
@@ -19,7 +22,7 @@ dspy-dropin serve --host 0.0.0.0 --port 8000
 ## curl
 
 ```bash
-curl -s localhost:8000/run -H 'content-type: application/json' \
+curl -s localhost:8000/run -H 'content-type: application/json' -H "Authorization: Bearer $DSPY_DROPIN_TOKEN" \
   -d '{"signature":"email -> intent, urgency: int","inputs":{"email":"Server is down!!"}}'
 ```
 
