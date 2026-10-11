@@ -10,6 +10,7 @@ import sys
 from typing import Any
 
 from . import __version__, config
+from .security import TOKEN_ENV, redact
 
 
 def _kv(pairs: list[str]) -> dict[str, Any]:
@@ -24,10 +25,18 @@ def cmd_doctor(a) -> int:
     import dspy
 
     print(f"dspy-dropin {__version__} | dspy {dspy.__version__} | python {sys.version.split()[0]}")
-    for var in ["DSPY_MODEL", *[v for v, _ in config.PROVIDERS], "DSPY_API_BASE", "DSPY_CACHE"]:
+    # Only ever print whether a variable is set, never its value.
+    for var in [
+        "DSPY_MODEL",
+        *[v for v, _ in config.PROVIDERS],
+        "DSPY_API_KEY",
+        "DSPY_API_BASE",
+        "DSPY_CACHE",
+        TOKEN_ENV,
+    ]:
         print(f"  {var:<20} {'set' if os.environ.get(var) else '-'}")
     model = config.detect_model()
-    print(f"  detected model: {model or 'NONE'}")
+    print(f"  detected model: {redact(model) if model else 'NONE'}")
     if not model:
         print("FAIL: set DSPY_MODEL or a provider API key.")
         return 1
@@ -35,15 +44,15 @@ def cmd_doctor(a) -> int:
         config.configure()
         print("  configure(): ok")
     except Exception as e:  # noqa: BLE001
-        print(f"FAIL configure(): {e}")
+        print(f"FAIL configure(): {redact(e)}")
         return 1
     if a.ping:
         from .oneliners import ask
 
         try:
-            print(f"  ping: {ask('Reply with the single word: pong')!r}")
+            print(f"  ping: {redact(ask('Reply with the single word: pong'))!r}")
         except Exception as e:  # noqa: BLE001
-            print(f"FAIL ping: {e}")
+            print(f"FAIL ping: {redact(e)}")
             return 1
     print("OK")
     return 0
@@ -63,7 +72,13 @@ def cmd_run(a) -> int:
 
     inputs = _kv(a.input)
     if a.json:
-        inputs.update(json.loads(a.json))
+        try:
+            extra = json.loads(a.json)
+        except ValueError as e:
+            raise RuntimeError(f"--json is not valid JSON: {e}") from None
+        if not isinstance(extra, dict):
+            raise RuntimeError("--json must be a JSON object")
+        inputs.update(extra)
     mod = task(a.signature, a.instructions, reasoning=a.reasoning)
     if a.load:
         mod.load(a.load)
@@ -147,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return a.fn(a)
     except RuntimeError as e:
-        print(f"error: {e}", file=sys.stderr)
+        print(f"error: {redact(e)}", file=sys.stderr)
         return 2
 
 

@@ -34,11 +34,27 @@ def detect_model(env: dict[str, str] | None = None) -> str | None:
     return None
 
 
+def _env_num(name: str, default: float, cast: type = float, lo: float | None = None, hi: float | None = None):
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return cast(default)
+    try:
+        v = cast(raw)
+    except ValueError:
+        raise RuntimeError(f"{name} must be a number (got {raw[:20]!r})") from None
+    if (lo is not None and v < lo) or (hi is not None and v > hi):
+        raise RuntimeError(f"{name} must be between {lo} and {hi}")
+    return v
+
+
 def _lm_kwargs(model: str) -> dict[str, Any]:
     kw: dict[str, Any] = {
         "cache": os.environ.get("DSPY_CACHE", "1") not in ("0", "false", "False"),
-        "temperature": float(os.environ.get("DSPY_TEMPERATURE", "0.0")),
-        "max_tokens": int(os.environ.get("DSPY_MAX_TOKENS", "4000")),
+        "temperature": _env_num("DSPY_TEMPERATURE", 0.0, float, 0.0, 2.0),
+        "max_tokens": _env_num("DSPY_MAX_TOKENS", 4000, int, 1, 1_000_000),
+        # Hard per-request timeout (seconds) so a hung provider can't hang the CLI/server forever.
+        "timeout": _env_num("DSPY_TIMEOUT", 60.0, float, 1.0, 3600.0),
+        "num_retries": _env_num("DSPY_NUM_RETRIES", 3, int, 0, 10),
     }
     if os.environ.get("DSPY_API_BASE"):
         kw["api_base"] = os.environ["DSPY_API_BASE"]
